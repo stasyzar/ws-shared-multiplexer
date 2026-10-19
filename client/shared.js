@@ -4,7 +4,7 @@ export function initSharedMode(onMessageCallback){
     worker.port.onmessage = (event) =>{
         const msg= event.data;
 
-        if(msg.type = 'SERVER_MESSAGE'){
+        if (msg.type === 'SERVER_MESSAGE') {
             onMessageCallback(msg.payload);
         }
     };

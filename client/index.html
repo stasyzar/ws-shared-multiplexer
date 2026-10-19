@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<script type="module">
+  import { initDirectMode } from './direct.js';
+  import { initSharedMode } from './shared.js';
+
+  const params = new URLSearchParams(window.location.search);
+  const mode = params.get('mode') || 'shared';
+
+  if (mode === 'direct') {
+    window.client = initDirectMode((msg) => console.log('[DIRECT] Отримано:', msg));
+    console.log(' Запущено в режимі DIRECT (окремий сокет для цієї вкладки)');
+  } else {
+    window.client = initSharedMode((msg) => console.log('[SHARED] Отримано:', msg));
+    console.log(' Запущено в режимі SHARED (спільний SharedWorker)');
+  }
+</script>
