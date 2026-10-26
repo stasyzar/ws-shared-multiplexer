@@ -1,4 +1,4 @@
-export function initSharedMode(onMessageCallback){
+export function initSharedMode(onMessageCallback, onStatusCallback = null) {
     const worker = new SharedWorker('worker.js');
 
     let tabId = sessionStorage.getItem('tab_id');
@@ -10,16 +10,25 @@ export function initSharedMode(onMessageCallback){
         sessionStorage.setItem('connectedAt', connectedAt);
     };
 
-    worker.port.postMessage({
-        type: 'TAB_INIT',
-        payload: { tabId, connectedAt }
-    });
+    const register = () => {
+        worker.port.postMessage({
+            type: 'TAB_INIT',
+            payload: { tabId, connectedAt }
+        });
+    };
+    register();
 
-    worker.port.onmessage = (event) =>{
-        const msg= event.data;
+    worker.port.onmessage = (event) => {
+        const msg = event.data;
 
-        if (msg.type === 'SERVER_MESSAGE') {
-            onMessageCallback(msg.payload);
+        switch (msg.type) {
+            case 'SERVER_MESSAGE':
+                onMessageCallback(msg.payload);
+                return;
+            case 'STATUS_UPDATE':
+                if (typeof onStatusCallback === 'function') {
+                    onStatusCallback(msg.payload);
+                }
         }
     };
 
@@ -35,6 +44,31 @@ export function initSharedMode(onMessageCallback){
                 type: 'SEND_TO_SERVER',
                 payload: text
             });
+        },
+
+        pause: () => {
+            worker.port.postMessage({ type: 'PAUSE_SOCKET' });
+        },
+
+        resume: () => {
+            worker.port.postMessage({ type: 'RESUME_SOCKET' });
+        },
+
+        addTestMessagesToQueue: (count = 3) => {
+            for (let i = 1; i <= count; i++) {
+                worker.port.postMessage({
+                    type: 'SEND_TO_SERVER',
+                    payload: `[Черга #${i}] створено о ${new Date().toLocaleTimeString()}`
+                });
+            }
+        },
+
+        simulateDisconnect: () => {
+            worker.port.postMessage({ type: 'TAB_DISCONNECTED' });
+        },
+
+        simulateReconnect: () => {
+            register();
         }
     };
 }
