@@ -24,11 +24,14 @@ export function initSharedMode(onMessageCallback, onStatusCallback = null) {
         switch (msg.type) {
             case 'SERVER_MESSAGE':
                 onMessageCallback(msg.payload);
-                return;
+                break;
             case 'STATUS_UPDATE':
+            case 'GRACE_STATUS':
+            case 'PAUSE_STATUS':
                 if (typeof onStatusCallback === 'function') {
-                    onStatusCallback(msg.payload);
+                    onStatusCallback(msg);
                 }
+                break;
         }
     };
 
@@ -58,7 +61,7 @@ export function initSharedMode(onMessageCallback, onStatusCallback = null) {
             for (let i = 1; i <= count; i++) {
                 worker.port.postMessage({
                     type: 'SEND_TO_SERVER',
-                    payload: `[Черга #${i}] створено о ${new Date().toLocaleTimeString()}`
+                    payload: `[Queue #${i}] created at ${new Date().toLocaleTimeString()}`
                 });
             }
         },
