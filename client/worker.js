@@ -1,11 +1,11 @@
-export const ConnectionStates = {
+const ConnectionStates = {
     CONNECTING: 'CONNECTING',
     DISCONNECTED: 'DISCONNECTED',
     CONNECTED: 'CONNECTED',
     RECONNECTING: 'RECONNECTING'
 };
 
-export class WebSocketMultiplexer {
+class WebSocketMultiplexer {
     constructor(config = {}) {
         this.url = config.url || `ws://${location.host}`;
         this.gracePeriodMs = config.gracePeriodMs ?? 3000;
