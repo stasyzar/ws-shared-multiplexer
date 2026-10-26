@@ -25,16 +25,20 @@ class WebSocketMultiplexer {
     }
 
     registerTab(port, { tabId, connectedAt } = {}) {
+        const wasInactive = this.ports.has(port) && !this.ports.get(port).active;
+        this.ports.set(port, { tabId, connectedAt, active: true });
+
         if (this.graceTimer) {
+            this.broadcastToTabs({ type: 'GRACE_STATUS', status: 'canceled' });
             clearTimeout(this.graceTimer);
             this.graceTimer = null;
-            console.log('[Multiplexer] Нова вкладка відкрилась вчасно: Grace Period скасовано.');
+            console.log('[Multiplexer] Tab reconnected in time. Grace Period canceled.');
+        } else if (wasInactive) {
+            this.broadcastToTabs({ type: 'GRACE_STATUS', status: 'reconnected' });
+            console.log('[Multiplexer] Tab reconnected after grace period expired.');
         }
 
-        this.ports.set(port, { tabId, connectedAt });
-
-        console.log(`[Multiplexer] Вкладку зареєстровано. Всього активних вкладок: ${this.ports.size}`);
-
+        console.log(`[Multiplexer] Tab registered. Active tabs: ${this.getActiveTabsCount()}`);
         this.broadcastStatus();
         this.connect();
     };
@@ -43,29 +47,38 @@ class WebSocketMultiplexer {
         if (!this.ports.has(port)) return;
 
         const info = this.ports.get(port);
-        this.ports.delete(port);
-        console.log(`[Multiplexer] Вкладка ${info.tabId} від'єдналася (${reason}). Залишилося: ${this.ports.size}`);
+        if (!info.active) return;
+        info.active = false;
+        if (reason === 'port_error') {
+            this.ports.delete(port);
+        }
+        console.log(`[Multiplexer] Tab ${info.tabId} disconnected (${reason}). Remaining tabs: ${this.getActiveTabsCount()}`);
         this.broadcastStatus();
-        if (this.ports.size === 0) {
+        if (this.getActiveTabsCount() === 0) {
             this.scheduleGracefulShutdown();
         }
     };
 
     scheduleGracefulShutdown() {
-        console.log(`[Multiplexer] Вкладок 0. Запуск Grace Period (${this.gracePeriodMs}мс)...`);
+        if (this.state === ConnectionStates.DISCONNECTED) {
+            return;
+        }
+        console.log(`[Multiplexer] 0 active tabs. Starting Grace Period (${this.gracePeriodMs}ms)...`);
+        this.broadcastToTabs({ type: 'GRACE_STATUS', status: 'started', timeoutMs: 3000 });
         this.graceTimer = setTimeout(() => {
-            console.log('[Multiplexer] Grace Period вичерпано. Закриваємо WebSocket для економії ресурсів.');
+            this.broadcastToTabs({ type: 'GRACE_STATUS', status: 'expired' });
+            console.log('[Multiplexer] Grace Period expired. Closing WebSocket.');
             this.disconnect();
             this.graceTimer = null;
         }, this.gracePeriodMs);
     };
 
     connect() {
-        if (this.state === ConnectionStates.CONNECTED || this.state === ConnectionStates.CONNECTING) return;
+        if (this.isPaused || this.getActiveTabsCount() === 0 || this.state === ConnectionStates.CONNECTED || this.state === ConnectionStates.CONNECTING) return;
 
         this.state = ConnectionStates.CONNECTING;
         this.broadcastStatus();
-        console.log('[Multiplexer] Відкриття фізичного WebSocket...');
+        console.log('[Multiplexer] Connecting physical WebSocket...');
 
         try {
             this.socket = new WebSocket(this.url);
@@ -73,7 +86,7 @@ class WebSocketMultiplexer {
             this.socket.onopen = () => {
                 this.state = ConnectionStates.CONNECTED;
                 this.reconnectAttempts = 0;
-                console.log('[Multiplexer] Фізичний WebSocket підключено до сервера!');
+                console.log('[Multiplexer] Physical WebSocket connected to server.');
                 this.broadcastStatus();
                 this.flushQueue();
             };
@@ -86,21 +99,23 @@ class WebSocketMultiplexer {
             };
 
             this.socket.onerror = (err) => {
-                console.error('[Multiplexer] Помилка WebSocket:', err);
+                console.error('[Multiplexer] WebSocket error:', err);
             };
 
             this.socket.onclose = (event) => {
-                console.log(`[Multiplexer] WebSocket закрито сервером (код: ${event.code})`);
+                console.log(`[Multiplexer] WebSocket closed by server (code: ${event.code})`);
                 this.socket = null;
                 this.state = ConnectionStates.DISCONNECTED;
                 this.broadcastStatus();
-                if (this.ports.size > 0) {
+                if (this.getActiveTabsCount() > 0 && !this.isPaused) {
                     this.scheduleReconnect();
                 }
             };
         } catch (error) {
             this.state = ConnectionStates.DISCONNECTED;
-            this.scheduleReconnect();
+            if (this.getActiveTabsCount() > 0 && !this.isPaused) {
+                this.scheduleReconnect();
+            }
         }
     };
 
@@ -111,7 +126,10 @@ class WebSocketMultiplexer {
         }
 
         if (this.socket) {
+            this.socket.onopen = null;
             this.socket.onclose = null;
+            this.socket.onerror = null;
+            this.socket.onmessage = null;
             this.socket.close();
             this.socket = null;
         }
@@ -121,8 +139,9 @@ class WebSocketMultiplexer {
     };
 
     scheduleReconnect() {
+        if (this.isPaused || this.getActiveTabsCount() === 0) return;
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.warn('[Multiplexer] Вичерпано ліміт спроб перепідключення.');
+            console.warn('[Multiplexer] Max reconnect attempts reached.');
             return;
         }
 
@@ -130,7 +149,7 @@ class WebSocketMultiplexer {
         this.state = ConnectionStates.RECONNECTING;
         this.broadcastStatus();
 
-        console.log(`[Multiplexer] Спроба відновлення зв'язку через ${this.reconnectIntervalMs}мс (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+        console.log(`[Multiplexer] Reconnecting in ${this.reconnectIntervalMs}ms (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
         this.reconnectTimer = setTimeout(() => this.connect(), this.reconnectIntervalMs);
     };
 
@@ -150,11 +169,13 @@ class WebSocketMultiplexer {
             case 'PAUSE_SOCKET':
                 this.isPaused = true;
                 this.disconnect();
-                console.log('[Multiplexer] Штучний офлайн увімкнено. Сокет зупинено.');
+                this.broadcastToTabs({ type: 'PAUSE_STATUS', isPaused: true });
+                console.log('[Multiplexer] Offline simulation enabled. Socket paused.');
                 break;
             case 'RESUME_SOCKET':
                 this.isPaused = false;
-                console.log('[Multiplexer] Штучний офлайн вимкнено. Відновлення зв\'язку...');
+                this.broadcastToTabs({ type: 'PAUSE_STATUS', isPaused: false });
+                console.log('[Multiplexer] Offline simulation disabled. Resuming socket...');
                 this.connect();
                 break;
         }
@@ -165,11 +186,11 @@ class WebSocketMultiplexer {
             this.socket.send(payload);
         }
         else {
-            console.log('[Multiplexer] Сокет ще не готовий. Повідомлення збережено в чергу.');
+            console.log('[Multiplexer] Socket not ready. Message enqueued.');
             this.messageQueue.push(payload);
             this.broadcastStatus();
 
-            if (this.state === ConnectionStates.DISCONNECTED && !this.isPaused) {
+            if (this.state === ConnectionStates.DISCONNECTED && !this.isPaused && this.getActiveTabsCount() > 0) {
                 this.connect();
             }
         }
@@ -198,11 +219,19 @@ class WebSocketMultiplexer {
             type: 'STATUS_UPDATE',
             payload: {
                 state: this.state,
-                activeTabs: this.ports.size,
+                activeTabs: this.getActiveTabsCount(),
                 queuedMessages: this.messageQueue.length
             }
         });
     };
+
+    getActiveTabsCount() {
+        let count = 0;
+        for (const info of this.ports.values()) {
+            if (info.active) count++;
+        }
+        return count;
+    }
 };
 
 const multiplexer = new WebSocketMultiplexer();
