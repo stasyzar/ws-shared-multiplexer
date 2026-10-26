@@ -20,6 +20,8 @@ class WebSocketMultiplexer {
         this.reconnectTimer = null;
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 3;
+
+        this.isPaused = false;
     }
 
     registerTab(port, { tabId, connectedAt } = {}) {
@@ -145,6 +147,16 @@ class WebSocketMultiplexer {
             case 'TAB_INIT':
                 this.registerTab(port, msg.payload);
                 break;
+            case 'PAUSE_SOCKET':
+                this.isPaused = true;
+                this.disconnect();
+                console.log('[Multiplexer] Штучний офлайн увімкнено. Сокет зупинено.');
+                break;
+            case 'RESUME_SOCKET':
+                this.isPaused = false;
+                console.log('[Multiplexer] Штучний офлайн вимкнено. Відновлення зв\'язку...');
+                this.connect();
+                break;
         }
     };
 
@@ -155,8 +167,9 @@ class WebSocketMultiplexer {
         else {
             console.log('[Multiplexer] Сокет ще не готовий. Повідомлення збережено в чергу.');
             this.messageQueue.push(payload);
+            this.broadcastStatus();
 
-            if (this.state === ConnectionStates.DISCONNECTED) {
+            if (this.state === ConnectionStates.DISCONNECTED && !this.isPaused) {
                 this.connect();
             }
         }
@@ -167,6 +180,7 @@ class WebSocketMultiplexer {
             const data = this.messageQueue.shift();
             this.socket.send(data);
         }
+        this.broadcastStatus();
     };
 
     broadcastToTabs(data) {
