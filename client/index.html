@@ -1,16 +1,211 @@
 <!DOCTYPE html>
-<script type="module">
-  import { initDirectMode } from './direct.js';
-  import { initSharedMode } from './shared.js';
+<html lang="uk">
 
-  const params = new URLSearchParams(window.location.search);
-  const mode = params.get('mode') || 'shared';
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebSocket Multiplexer — Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
 
-  if (mode === 'direct') {
-    window.client = initDirectMode((msg) => console.log('[DIRECT] Отримано:', msg));
-    console.log(' Запущено в режимі DIRECT (окремий сокет для цієї вкладки)');
-  } else {
-    window.client = initSharedMode((msg) => console.log('[SHARED] Отримано:', msg));
-    console.log(' Запущено в режимі SHARED (спільний SharedWorker)');
-  }
-</script>
+<body>
+  <div class="container">
+    <header>
+      <h1>WebSocket Multiplexer</h1>
+      <span class="tab-badge" id="tab-id-badge">Вкладка: невідомо</span>
+    </header>
+
+    <section class="card">
+      <h2>Поточний стан воркера</h2>
+      <div class="status-grid">
+        <div class="status-item">
+          <span class="status-label">Режим</span>
+          <span class="status-value" id="val-mode">SHARED</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Стан з'єднання</span>
+          <div><span class="badge-state state-disconnected" id="val-state">DISCONNECTED</span></div>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Активних вкладок</span>
+          <span class="status-value" id="val-tabs">0</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Черга повідомлень</span>
+          <span class="status-value" id="val-queue">0</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Тестування черги повідомлень (Message Queue)</h2>
+      <p class="hint-text">
+        1. Натисніть «Імітувати розрив» (сокет вимкнеться).<br>
+        2. Додайте повідомлення в чергу (лічильник черги зросте).<br>
+        3. Натисніть «Відновити зв'язок» (сокет підключиться і черга спустошиться).
+      </p>
+      <div class="button-group">
+        <button id="btn-pause" class="btn-warning">Імітувати розрив (Pause)</button>
+        <button id="btn-add-queue" class="btn-primary">Додати 3 повідомлення в чергу</button>
+        <button id="btn-resume" class="btn-success">Відновити зв'язок (Resume)</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Тестування Grace Period (3 сек)</h2>
+      <p class="hint-text">
+        Симуляція від'єднання вкладки без закриття вікна.
+      </p>
+      <div class="button-group">
+        <button id="btn-sim-disconnect" class="btn-danger">Симулювати закриття вкладки</button>
+        <button id="btn-sim-reconnect" class="btn-primary">Повернути вкладку</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Надіслати повідомлення</h2>
+      <div class="input-row">
+        <input type="text" id="input-message" placeholder="Введіть текст повідомлення...">
+        <button id="btn-send" class="btn-primary">Надіслати</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2>Журнал подій та повідомлень</h2>
+        <button id="btn-clear-log" style="padding: 4px 8px; font-size: 0.75rem;">Очистити</button>
+      </div>
+      <div class="log-container" id="log-list"></div>
+    </section>
+  </div>
+
+  <script type="module">
+    import { initDirectMode } from './direct.js';
+    import { initSharedMode } from './shared.js';
+
+    const tabIdBadge = document.getElementById('tab-id-badge');
+    const valMode = document.getElementById('val-mode');
+    const valState = document.getElementById('val-state');
+    const valTabs = document.getElementById('val-tabs');
+    const valQueue = document.getElementById('val-queue');
+
+    const logList = document.getElementById('log-list');
+    const btnClearLog = document.getElementById('btn-clear-log');
+
+    const btnPause = document.getElementById('btn-pause');
+    const btnAddQueue = document.getElementById('btn-add-queue');
+    const btnResume = document.getElementById('btn-resume');
+
+    const btnSimDisconnect = document.getElementById('btn-sim-disconnect');
+    const btnSimReconnect = document.getElementById('btn-sim-reconnect');
+
+    const inputMessage = document.getElementById('input-message');
+    const btnSend = document.getElementById('btn-send');
+
+    function addLog(text, type = "system") {
+      const newMessageDiv = document.createElement('div');
+      newMessageDiv.className = 'log-entry';
+      const date = new Date();
+      const time = date.toLocaleTimeString();
+      const typeClass = (type === 'server') ? 'log-server' : 'log-system';
+
+      newMessageDiv.innerHTML = `<span class='log-time'>[${time}]</span> <span class=${typeClass}>${text}</span>`;
+      logList.appendChild(newMessageDiv);
+      logList.scrollTop = logList.scrollHeight;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get('mode') || 'shared';
+    valMode.textContent = mode.toUpperCase();
+
+    function onMessage(msg) {
+      addLog(`[Server]: ${msg}`, 'server');
+    }
+
+    function onStatus(msg) {
+      const tabId = sessionStorage.getItem('tab_id');
+      if (tabId) {
+        tabIdBadge.textContent = `Tab: ${tabId}`;
+      }
+      switch (msg.type) {
+        case 'STATUS_UPDATE':
+          const { state, activeTabs, queuedMessages } = msg.payload;
+          valTabs.textContent = activeTabs;
+          valQueue.textContent = queuedMessages;
+          valState.textContent = state.toUpperCase();
+          valState.className = 'badge-state state-' + state.toLowerCase();
+          break;
+        case 'GRACE_STATUS':
+          if (msg.status === 'started') {
+            addLog(`Grace Period started (${msg.timeoutMs}ms countdown)...`, 'system');
+          } else if (msg.status === 'canceled') {
+            addLog('Grace Period canceled — tab reconnected in time!', 'system');
+          } else if (msg.status === 'expired') {
+            addLog('Grace Period expired — physical WebSocket closed to save resources.', 'system');
+          } else if (msg.status === 'reconnected') {
+            addLog('Tab reconnected — starting new connection...', 'system');
+          }
+          break;
+        case 'PAUSE_STATUS':
+          if (msg.isPaused) {
+            addLog('Socket paused (offline simulation)', 'system');
+          } else {
+            addLog('Socket resumed (reconnecting)', 'system');
+          }
+          break;
+        default: break;
+      }
+    }
+
+    if (mode === 'direct') {
+      window.client = initDirectMode(onMessage);
+      addLog('Mode: DIRECT (isolated socket)', 'system');
+    } else {
+      window.client = initSharedMode(onMessage, onStatus);
+      addLog('Mode: SHARED (multiplexed worker)', 'system');
+    }
+
+    btnSend.addEventListener('click', () => {
+      const text = inputMessage.value.trim();
+      if (text) {
+        window.client.send(text);
+        addLog(`[You]: ${text}`, 'system');
+        inputMessage.value = '';
+      }
+    });
+
+    btnPause.addEventListener('click', () => {
+      window.client.pause();
+    });
+
+    btnResume.addEventListener('click', () => {
+      window.client.resume();
+    });
+
+    btnAddQueue.addEventListener('click', () => {
+      window.client.addTestMessagesToQueue(3);
+      addLog('Enqueued 3 test messages', 'system');
+    });
+
+    btnSimDisconnect.addEventListener('click', () => {
+      window.client.simulateDisconnect();
+    });
+
+    btnSimReconnect.addEventListener('click', () => {
+      window.client.simulateReconnect();
+    });
+
+    btnClearLog.addEventListener('click', () => {
+      logList.innerHTML = '';
+    });
+
+    inputMessage.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        btnSend.click();
+      }
+    });
+
+  </script>
+</body>
+
+</html>
