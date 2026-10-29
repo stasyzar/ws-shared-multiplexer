@@ -11,13 +11,12 @@
 <body>
   <div class="container">
     <header>
-      <h1>🌐 WebSocket Multiplexer</h1>
+      <h1>WebSocket Multiplexer</h1>
       <span class="tab-badge" id="tab-id-badge">Вкладка: невідомо</span>
     </header>
 
-    <!-- Стан з'єднання -->
     <section class="card">
-      <h2>📊 Поточний стан воркера</h2>
+      <h2>Поточний стан воркера</h2>
       <div class="status-grid">
         <div class="status-item">
           <span class="status-label">Режим</span>
@@ -38,9 +37,8 @@
       </div>
     </section>
 
-    <!-- Тестування черги повідомлень (Офлайн) -->
     <section class="card">
-      <h2>📦 Тестування черги повідомлень (Message Queue)</h2>
+      <h2>Тестування черги повідомлень (Message Queue)</h2>
       <p class="hint-text">
         1. Натисніть «Імітувати розрив» (сокет вимкнеться).<br>
         2. Додайте повідомлення в чергу (лічильник черги зросте).<br>
@@ -53,31 +51,28 @@
       </div>
     </section>
 
-    <!-- Тестування Grace Period -->
     <section class="card">
-      <h2>⏱ Тестування Grace Period (3 сек)</h2>
+      <h2>Тестування Grace Period (3 сек)</h2>
       <p class="hint-text">
-        Симуляція від'єднання вкладки без закриття вікна (щоб Chrome не вбив процес воркера).
+        Симуляція від'єднання вкладки без закриття вікна.
       </p>
       <div class="button-group">
-        <button id="btn-sim-disconnect" class="btn-danger">🔌 Симулювати закриття вкладки</button>
-        <button id="btn-sim-reconnect" class="btn-primary">⚡ Повернути вкладку</button>
+        <button id="btn-sim-disconnect" class="btn-danger">Симулювати закриття вкладки</button>
+        <button id="btn-sim-reconnect" class="btn-primary">Повернути вкладку</button>
       </div>
     </section>
 
-    <!-- Звичайне надсилання повідомлення -->
     <section class="card">
-      <h2>💬 Надіслати повідомлення</h2>
+      <h2>Надіслати повідомлення</h2>
       <div class="input-row">
         <input type="text" id="input-message" placeholder="Введіть текст повідомлення...">
         <button id="btn-send" class="btn-primary">Надіслати</button>
       </div>
     </section>
 
-    <!-- Журнал повідомлень -->
     <section class="card">
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h2>📜 Журнал подій та повідомлень</h2>
+        <h2>Журнал подій та повідомлень</h2>
         <button id="btn-clear-log" style="padding: 4px 8px; font-size: 0.75rem;">Очистити</button>
       </div>
       <div class="log-container" id="log-list"></div>
@@ -88,27 +83,22 @@
     import { initDirectMode } from './direct.js';
     import { initSharedMode } from './shared.js';
 
-    // Бейджі статусу
     const tabIdBadge = document.getElementById('tab-id-badge');
     const valMode = document.getElementById('val-mode');
     const valState = document.getElementById('val-state');
     const valTabs = document.getElementById('val-tabs');
     const valQueue = document.getElementById('val-queue');
 
-    // Журнал
     const logList = document.getElementById('log-list');
     const btnClearLog = document.getElementById('btn-clear-log');
 
-    // Кнопки черги
     const btnPause = document.getElementById('btn-pause');
     const btnAddQueue = document.getElementById('btn-add-queue');
     const btnResume = document.getElementById('btn-resume');
 
-    // Кнопки Grace Period
     const btnSimDisconnect = document.getElementById('btn-sim-disconnect');
     const btnSimReconnect = document.getElementById('btn-sim-reconnect');
 
-    // Форма відправки
     const inputMessage = document.getElementById('input-message');
     const btnSend = document.getElementById('btn-send');
 
