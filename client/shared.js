@@ -1,6 +1,7 @@
 export function initSharedMode(onMessageCallback, onStatusCallback = null) {
     const worker = new SharedWorker('worker.js');
 
+    let releaseTabLock = null;
     let tabId = sessionStorage.getItem('tab_id');
     let connectedAt = sessionStorage.getItem('connectedAt');
     if (!tabId) {
@@ -10,7 +11,27 @@ export function initSharedMode(onMessageCallback, onStatusCallback = null) {
         sessionStorage.setItem('connectedAt', connectedAt);
     };
 
+    const acquireTabLock = () => {
+        if (!navigator.locks) {
+            console.warn('[Tab] Web Locks API не підтримується цим браузером.');
+            return;
+        }
+        if (releaseTabLock) {
+            releaseTabLock();
+            releaseTabLock = null;
+        }
+
+        navigator.locks.request(`tab-lock-${tabId}`, () => {
+            console.log(`[Tab] Замок tab-lock-${tabId} успішно захоплено.`);
+
+            return new Promise((resolve) => {
+                releaseTabLock = resolve;
+            })
+        })
+    }
+
     const register = () => {
+        acquireTabLock();
         worker.port.postMessage({
             type: 'TAB_INIT',
             payload: { tabId, connectedAt }
@@ -38,6 +59,10 @@ export function initSharedMode(onMessageCallback, onStatusCallback = null) {
     worker.port.start();
 
     window.addEventListener('beforeunload', () => {
+        if (releaseTabLock) {
+            releaseTabLock();
+            releaseTabLock = null;
+        }
         worker.port.postMessage({ type: 'TAB_DISCONNECTED' });
     });
 
@@ -67,6 +92,10 @@ export function initSharedMode(onMessageCallback, onStatusCallback = null) {
         },
 
         simulateDisconnect: () => {
+            if (releaseTabLock) {
+                releaseTabLock();
+                releaseTabLock = null;
+            }
             worker.port.postMessage({ type: 'TAB_DISCONNECTED' });
         },
 
