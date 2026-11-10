@@ -22,6 +22,8 @@ class WebSocketMultiplexer {
         this.maxReconnectAttempts = 3;
 
         this.isPaused = false;
+
+        this.broadcastChannel = new BroadcastChannel('ws-multiplexer-channel');
     }
 
     watchTabLock(port, tabId){
@@ -225,6 +227,8 @@ class WebSocketMultiplexer {
                 this.unregisterTab(port, 'port_error');
             }
         }
+
+        this.broadcastChannel.postMessage(data);
     };
 
     broadcastStatus() {
