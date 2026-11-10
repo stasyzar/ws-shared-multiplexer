@@ -24,10 +24,23 @@ class WebSocketMultiplexer {
         this.isPaused = false;
     }
 
+    watchTabLock(port, tabId){
+        if(!navigator.locks || !tabId) return;
+
+        navigator.locks.request(`tab-lock-${tabId}`, () => {
+            console.log(`[Multiplexer] Lock for tab ${tabId} was released (detected via Web Locks).`);
+            this.unregisterTab(port, 'lock_released');
+        }).catch((err) => {
+             console.error(`[Multiplexer] Помилка відстеження Web Lock для ${tabId}:`, err);
+        })
+    }
+
     registerTab(port, { tabId, connectedAt } = {}) {
         const wasInactive = this.ports.has(port) && !this.ports.get(port).active;
         this.ports.set(port, { tabId, connectedAt, active: true });
 
+        this.watchTabLock(port, tabId);
+        
         if (this.graceTimer) {
             this.broadcastToTabs({ type: 'GRACE_STATUS', status: 'canceled' });
             clearTimeout(this.graceTimer);
