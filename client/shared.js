@@ -13,7 +13,7 @@ export function initSharedMode(onMessageCallback, onStatusCallback = null) {
 
     const acquireTabLock = () => {
         if (!navigator.locks) {
-            console.warn('[Tab] Web Locks API не підтримується цим браузером.');
+            console.warn('[Tab] Web Locks API is not supported in this browser.');
             return;
         }
         if (releaseTabLock) {
@@ -22,7 +22,7 @@ export function initSharedMode(onMessageCallback, onStatusCallback = null) {
         }
 
         navigator.locks.request(`tab-lock-${tabId}`, () => {
-            console.log(`[Tab] Замок tab-lock-${tabId} успішно захоплено.`);
+            console.log(`[Tab] Lock tab-lock-${tabId} successfully acquired.`);
 
             return new Promise((resolve) => {
                 releaseTabLock = resolve;

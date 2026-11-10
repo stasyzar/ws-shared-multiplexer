@@ -31,7 +31,7 @@ class WebSocketMultiplexer {
             console.log(`[Multiplexer] Lock for tab ${tabId} was released (detected via Web Locks).`);
             this.unregisterTab(port, 'lock_released');
         }).catch((err) => {
-             console.error(`[Multiplexer] Помилка відстеження Web Lock для ${tabId}:`, err);
+             console.error(`[Multiplexer] Error watching Web Lock for ${tabId}:`, err);
         })
     }
 
