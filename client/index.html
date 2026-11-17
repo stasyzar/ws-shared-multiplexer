@@ -115,7 +115,7 @@
     }
 
     const params = new URLSearchParams(window.location.search);
-    const mode = params.get('mode') || 'shared';
+    const mode = params.get('mode') || 'shared-ports';
     valMode.textContent = mode.toUpperCase();
 
     function onMessage(msg) {
@@ -160,9 +160,12 @@
     if (mode === 'direct') {
       window.client = initDirectMode(onMessage);
       addLog('Mode: DIRECT (isolated socket)', 'system');
+    } else if (mode === 'shared-broadcast') {
+      window.client = initSharedMode(onMessage, onStatus, 'broadcast');
+      addLog('Mode: SHARED-BROADCAST (BroadcastChannel bus)', 'system');
     } else {
-      window.client = initSharedMode(onMessage, onStatus);
-      addLog('Mode: SHARED (multiplexed worker)', 'system');
+      window.client = initSharedMode(onMessage, onStatus, 'ports');
+      addLog('Mode: SHARED-PORTS (MessagePort pool)', 'system');
     }
 
     btnSend.addEventListener('click', () => {

@@ -1,4 +1,4 @@
-export function initSharedMode(onMessageCallback, onStatusCallback = null) {
+export function initSharedMode(onMessageCallback, onStatusCallback = null, strategy = 'ports') {
     const worker = new SharedWorker('worker.js');
 
     let releaseTabLock = null;
@@ -39,9 +39,7 @@ export function initSharedMode(onMessageCallback, onStatusCallback = null) {
     };
     register();
 
-    worker.port.onmessage = (event) => {
-        const msg = event.data;
-
+    const handleIncomingMessage = (msg) => {
         switch (msg.type) {
             case 'SERVER_MESSAGE':
                 onMessageCallback(msg.payload);
@@ -55,6 +53,13 @@ export function initSharedMode(onMessageCallback, onStatusCallback = null) {
                 break;
         }
     };
+
+    if (strategy === 'broadcast') {
+        const channel = new BroadcastChannel('ws-multiplexer-channel');
+        channel.onmessage = (event) => handleIncomingMessage(event.data);
+    } else {
+        worker.port.onmessage = (event) => handleIncomingMessage(event.data);
+    }
 
     worker.port.start();
 
