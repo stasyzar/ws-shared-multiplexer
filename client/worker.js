@@ -251,7 +251,7 @@ export class WebSocketMultiplexer {
     }
 };
 
-if (typeof self !== 'undefined' && typeof self.onconnect !== 'undefined') {
+if (typeof self !== 'undefined') {
     const multiplexer = new WebSocketMultiplexer();
     self.onconnect = (event) => {
         const port = event.ports[0];
