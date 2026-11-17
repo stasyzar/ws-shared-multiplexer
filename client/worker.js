@@ -5,7 +5,7 @@ const ConnectionStates = {
     RECONNECTING: 'RECONNECTING'
 };
 
-class WebSocketMultiplexer {
+export class WebSocketMultiplexer {
     constructor(config = {}) {
         this.url = config.url || `ws://${location.host}`;
         this.gracePeriodMs = config.gracePeriodMs ?? 3000;
@@ -26,14 +26,14 @@ class WebSocketMultiplexer {
         this.broadcastChannel = new BroadcastChannel('ws-multiplexer-channel');
     }
 
-    watchTabLock(port, tabId){
-        if(!navigator.locks || !tabId) return;
+    watchTabLock(port, tabId) {
+        if (!navigator.locks || !tabId) return;
 
         navigator.locks.request(`tab-lock-${tabId}`, () => {
             console.log(`[Multiplexer] Lock for tab ${tabId} was released (detected via Web Locks).`);
             this.unregisterTab(port, 'lock_released');
         }).catch((err) => {
-             console.error(`[Multiplexer] Error watching Web Lock for ${tabId}:`, err);
+            console.error(`[Multiplexer] Error watching Web Lock for ${tabId}:`, err);
         })
     }
 
@@ -42,7 +42,7 @@ class WebSocketMultiplexer {
         this.ports.set(port, { tabId, connectedAt, active: true });
 
         this.watchTabLock(port, tabId);
-        
+
         if (this.graceTimer) {
             this.broadcastToTabs({ type: 'GRACE_STATUS', status: 'canceled' });
             clearTimeout(this.graceTimer);
@@ -251,10 +251,12 @@ class WebSocketMultiplexer {
     }
 };
 
-const multiplexer = new WebSocketMultiplexer();
-self.onconnect = (event) => {
-    const port = event.ports[0];
-    port.onmessage = (event) => multiplexer.handleTabMessage(port, event.data);
-    port.start();
-};
+if (typeof self !== 'undefined') {
+    const multiplexer = new WebSocketMultiplexer();
+    self.onconnect = (event) => {
+        const port = event.ports[0];
+        port.onmessage = (event) => multiplexer.handleTabMessage(port, event.data);
+        port.start();
+    };
+}
 
