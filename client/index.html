@@ -82,6 +82,7 @@
   <script type="module">
     import { initDirectMode } from './direct.js';
     import { initSharedMode } from './shared.js';
+    import { initLeaderMode } from './leader.js';
 
     const tabIdBadge = document.getElementById('tab-id-badge');
     const valMode = document.getElementById('val-mode');
@@ -128,6 +129,11 @@
         tabIdBadge.textContent = `Tab: ${tabId}`;
       }
       switch (msg.type) {
+        case 'ROLE_CHANGE':
+          const icon = msg.isLeader ? 'LEADER' : 'FOLLOWER';
+          tabIdBadge.textContent = `${icon} (${tabId || 'tab'})`;
+          addLog(`Role assigned: ${msg.role}`, 'system');
+          break;
         case 'STATUS_UPDATE':
           const { state, activeTabs, queuedMessages } = msg.payload;
           valTabs.textContent = activeTabs;
@@ -160,6 +166,9 @@
     if (mode === 'direct') {
       window.client = initDirectMode(onMessage);
       addLog('Mode: DIRECT (isolated socket)', 'system');
+    } else if (mode === 'leader' || mode === 'shared-leader') {
+      window.client = initLeaderMode(onMessage, onStatus);
+      addLog('Mode: LEADER-ELECTION (Lock + BroadcastChannel fallback)', 'system');
     } else if (mode === 'shared-broadcast') {
       window.client = initSharedMode(onMessage, onStatus, 'broadcast');
       addLog('Mode: SHARED-BROADCAST (BroadcastChannel bus)', 'system');
@@ -178,24 +187,26 @@
     });
 
     btnPause.addEventListener('click', () => {
-      window.client.pause();
+      if (window.client.pause) window.client.pause();
     });
 
     btnResume.addEventListener('click', () => {
-      window.client.resume();
+      if (window.client.resume) window.client.resume();
     });
 
     btnAddQueue.addEventListener('click', () => {
-      window.client.addTestMessagesToQueue(3);
-      addLog('Enqueued 3 test messages', 'system');
+      if (window.client.addTestMessagesToQueue) {
+        window.client.addTestMessagesToQueue(3);
+        addLog('Enqueued 3 test messages', 'system');
+      }
     });
 
     btnSimDisconnect.addEventListener('click', () => {
-      window.client.simulateDisconnect();
+      if (window.client.simulateDisconnect) window.client.simulateDisconnect();
     });
 
     btnSimReconnect.addEventListener('click', () => {
-      window.client.simulateReconnect();
+      if (window.client.simulateReconnect) window.client.simulateReconnect();
     });
 
     btnClearLog.addEventListener('click', () => {
